@@ -127,19 +127,30 @@ const sb=supabase.createClient(URL_,KEY);
 let me=null,view=localStorage.getItem('erp_v_view')||'dash',C={},cart={s:[],p:[],q:[],t:[]},RT=null,st='',tests=null,per='month',d1='',d2='',payInvoices=[],stk=null;
 const $=s=>document.querySelector(s),v=id=>{const x=$('#'+id);return x?x.value:''},n=id=>+v(id)||0,e=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=x=>(+x||0).toLocaleString('ar-EG',{maximumFractionDigits:2});
-let _busy=0,_loaderTimer=null;
-function setLoading(on,title='جاري التحميل...',text='من فضلك انتظر') {
-  const box=$('#globalLoader'); const mark=document.querySelector('.brandmark');
-  _busy=Math.max(0,_busy+(on?1:-1));
-  if(on){ if(_loaderTimer)clearTimeout(_loaderTimer); _loaderTimer=setTimeout(()=>{if(box){$('#loaderTitle').textContent=title;$('#loaderText').textContent=text;box.classList.add('show')} mark?.classList.add('loading')},120);}
-  else { _busy=Math.max(0,_busy-1); if(_busy===0){ if(_loaderTimer)clearTimeout(_loaderTimer); box?.classList.remove('show'); mark?.classList.remove('loading'); }}
+let _loading=false,_loaderTimer=null,_loadingLabel='';
+function showLoader(title='جاري التحميل...',text='من فضلك انتظر'){
+  const box=$('#globalLoader');
+  if(!box)return;
+  _loading=true; _loadingLabel=title;
+  const t=$('#loaderTitle'),x=$('#loaderText');
+  if(t)t.textContent=title; if(x)x.textContent=text;
+  box.classList.add('show');
+  document.querySelectorAll('.brandmark').forEach(m=>m.classList.add('loading'));
 }
-function withLoading(fn,title='جاري المعالجة...',text='يتم حفظ البيانات بأمان') {
-  setLoading(true,title,text);
-  return Promise.resolve().then(fn).finally(()=>setLoading(false));
+function hideLoader(){
+  _loading=false;
+  if(_loaderTimer){clearTimeout(_loaderTimer);_loaderTimer=null;}
+  const box=$('#globalLoader'); if(box)box.classList.remove('show');
+  document.querySelectorAll('.brandmark').forEach(m=>m.classList.remove('loading'));
+}
+function withLoading(fn,title='جاري المعالجة...',text='يتم حفظ البيانات بأمان'){
+  if(_loaderTimer)clearTimeout(_loaderTimer);
+  // Only show the full overlay if the operation actually takes noticeable time.
+  _loaderTimer=setTimeout(()=>showLoader(title,text),180);
+  return Promise.resolve().then(fn).finally(()=>hideLoader());
 }
 function toast(msg){const t=$('#toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
-function go(vw){view=vw;localStorage.setItem('erp_v_view',vw);closeMobileNav?.();R()}
+function go(vw){view=vw;localStorage.setItem('erp_v_view',vw);closeMobileNav?.();return withLoading(()=>R(),`جاري فتح ${NAV.find(x=>x[0]===vw)?.[1]||'الصفحة'}...`,'جارٍ تحميل البيانات')}
 
 const P={admin:'*',accountant:['dash','prod','cust','supp','sales','purch','po','grn','dn','pay','exp','cash','trf','ret','quo','ord','stmt','emp','prl','asset','bank','price','rep','jr','stk','period','appr','chk','comm','taxdoc','org','health','audit'],sales:['dash','prod','cust','sales','dn','ret','quo','ord','stmt','price','comm','taxdoc','appr'],store:['dash','prod','purch','po','grn','dn','ret','trf','stk','mfg']};
 const can=x=>me&&(P[me.role]==='*'||P[me.role].includes(x));
@@ -382,7 +393,7 @@ async function R(q){
   if(!me.active){return _inactiveScreen()}
   if(!can(view))view='dash';
   localStorage.setItem('erp_v_view',view);
-  await withLoading(()=>loadAll(),'جاري فتح الصفحة...',`يتم تحميل ${e(NAV.find(x=>x[0]===view)?.[1]||'الصفحة')}`);
+  await loadAll();
   let h='';
   try{
     if(view==='dash')h=await dash(); else if(view==='po')h=await poView(); else if(view==='grn')h=await grnView(); else if(view==='dn')h=await dnView();
@@ -400,9 +411,15 @@ function _loginScreen(){$('#app').innerHTML=`<div class="login-page"><section cl
 function _inactiveScreen(){$('#app').innerHTML=`<div class="login-page"><section class="login-card"><div class="login-brand"><div class="brandmark">E</div><div><b>ERP Enterprise</b><small>منظومة إدارة الأعمال</small></div></div><h2>الحساب بانتظار التفعيل</h2><p class="login-sub">سيتطلب الحساب تفعيل المدير قبل استخدام النظام.</p><button class="btn" style="width:100%;min-height:48px" onclick="logout()">خروج</button></section></div>`}
 async function login(){return withLoading(async()=>{const{error}=await sb.auth.signInWithPassword({email:v('lu'),password:v('lp')});if(error)throw error;await boot()},'جاري تسجيل الدخول...','جارٍ الاتصال بالنظام بأمان')}
 async function signup(){return withLoading(async()=>{const{error}=await sb.auth.signUp({email:v('lu'),password:v('lp')});if(error)throw error;alert('تم إنشاء الحساب. أكد البريد إذا كان التأكيد مفعلاً.')},'جاري إنشاء الحساب...','جارٍ تجهيز حسابك')}
-async function logout(){await sb.auth.signOut();me=null;R()}
-async function boot(){const{data:{user}}=await sb.auth.getUser();me=null;if(user){const{data,error}=await sb.from('profiles').select('*').eq('id',user.id).single();if(!error)me=data}R()}
+async function logout(){return withLoading(async()=>{await sb.auth.signOut();me=null;localStorage.removeItem('erp_v_view');view='dash';await R()},'جاري تسجيل الخروج...','جارٍ إنهاء الجلسة بأمان')}
+async function boot(){const{data:{user}}=await sb.auth.getUser();me=null;if(user){const{data,error}=await sb.from('profiles').select('*').eq('id',user.id).single();if(!error)me=data}await R()}
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape')closeMobileNav()});
+window.addEventListener('pageshow',()=>{ hideLoader(); });
+window.addEventListener('unhandledrejection',()=>{ if(_loading) hideLoader(); });
+window.addEventListener('error',()=>{ if(_loading) hideLoader(); });
+
+// Initial app boot: show the loader only while the first session/profile request is actually running.
+withLoading(()=>boot(),'جاري تشغيل النظام...','جارٍ التحقق من جلسة الدخول وتحميل الإعدادات');
 document.querySelector('#globalLoader')?.classList.add('show');
 sb.auth.getSession().then(boot).catch(err=>{const b=document.querySelector('#globalLoader');b?.classList.remove('show');alert(err?.message||err)});
 </script>
