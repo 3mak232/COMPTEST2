@@ -71,6 +71,19 @@ body.menu-open{overflow:hidden}
 
 @media print{.sidebar,.topbar,.np{display:none!important}.shell{margin:0}.page{padding:0}}
 
+
+/* V9 final responsive hardening */
+#app{width:100%;min-height:100dvh}
+.login-page{position:fixed!important;inset:0!important;width:100vw!important;min-height:100dvh!important;margin:0!important;z-index:1000!important;display:grid!important;place-items:center!important;align-content:center!important;justify-items:center!important;padding:24px!important}
+.login-card{margin:0!important;width:min(440px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px);overflow:auto}
+@media(max-width:780px){
+  .login-page{padding:16px!important}
+  .login-card{width:min(420px,calc(100vw - 24px))!important;padding:20px 16px!important}
+  .mobile-bottom{padding-bottom:calc(7px + env(safe-area-inset-bottom))!important}
+  .mobile-bottom button{min-width:58px!important}
+  .top-search{max-width:none!important}
+}
+
 /* V8 polish + login + mobile ergonomics */
 html,body{overflow-x:hidden}.login-page{min-height:100dvh;width:100%;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 0,#eef4ff 0,#f6f8fb 46%,#eef1f7 100%)}.login-card{width:min(440px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 20px 60px rgba(15,23,42,.10)}.login-brand{display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:22px;text-align:right}.login-card .brandmark{width:52px;height:52px;font-size:24px}.login-card h2{margin:0 0 6px}.login-sub{color:var(--muted);margin:0 0 18px}.login-field{display:flex;flex-direction:column;gap:6px;margin:10px 0}.login-field label{font-size:12px;font-weight:800;color:#475467}.login-field input{width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;outline:none}.login-field input:focus{border-color:#93b4ff;box-shadow:0 0 0 3px rgba(37,99,235,.10)}.login-actions{display:grid;gap:8px;margin-top:14px}.login-note{font-size:11px;color:var(--muted);text-align:center;margin-top:14px}.table-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.trace-badge{display:inline-flex;align-items:center;gap:5px;background:#f2f7ff;color:#2458b3;border:1px solid #dce8ff;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:800}.mobile-bottom{display:none}
 @media(max-width:780px){
@@ -153,6 +166,28 @@ async function traceView(){const TP=C.products.filter(p=>p.active&&(p.track_batc
 <div class="card"><div class="card-title"><b>رصيد التشغيلات</b></div>${lots.length?T(['الصنف','التشغيلة','الصلاحية','المخزن','الكمية','الحالة'],lots.map(x=>[e(by(C.products,x.product_id).name),e(x.lot_no),x.expiry_date||'—',e(by(C.warehouses,x.warehouse_id).name),fmt(x.qty),x.expired?chip('منتهي','danger'):chip('سليم','success')])):'<div class="empty">لا توجد تشغيلات.</div>'}</div>
 <div class="card"><div class="card-title"><b>Serials</b></div>${serials.length?T(['الصنف','Serial','الحالة','المخزن','الصلاحية'],serials.slice(0,200).map(x=>[e(by(C.products,x.product_id).name),e(x.serial_no),chip(x.status,x.status==='Available'?'success':'warning'),e(by(C.warehouses,x.warehouse_id).name)||'—',x.expired?chip('منتهي','danger'):'—'])):'<div class="empty">لا توجد Serials.</div>'}</div>
 <div class="card"><div class="card-title"><b>MRP / اقتراحات إعادة التوريد</b></div>${mrp.length?T(['الصنف','المخزن','متاح','وارد','محجوز','المتوقع','الحد','Safety','اقتراح الشراء','Lead Time'],mrp.slice(0,200).map(x=>[e(x.product_name),e(by(C.warehouses,x.warehouse_id).name),fmt(x.on_hand),fmt(x.incoming),fmt(x.committed),fmt(x.projected),fmt(x.min_stock),fmt(x.safety_stock),fmt(x.suggested_qty),x.lead_time_days])):'<div class="empty success">لا توجد اقتراحات إعادة توريد حاليًا.</div>'}</div>`}
+async function runFinalSuite(){
+  const box=$('#enterpriseTestBox');
+  box.innerHTML='<p>جاري تشغيل فحص Go-Live النهائي...</p>';
+  try{
+    const r=await rpc('run_final_go_live_suite',{});
+    const pre=r.preflight||{};
+    const rows=[
+      ['enterprise',r.enterprise?.ok===true],
+      ['advanced inventory',r.advanced?.ok===true],
+      ['RLS enabled on public tables',+(pre.rls_missing_tables||0)===0],
+      ['no anon table privileges',+(pre.anon_table_privileges||0)===0],
+      ['no anon-executable functions',+(pre.anon_executable_functions||0)===0],
+      ['security-definer guards',+(pre.weak_security_definer_functions||0)===0],
+      ['journal balanced',+(pre.unbalanced_journal_entries||0)===0],
+      ['invoice paid sync',+(pre.sales_paid_mismatches||0)===0 && +(pre.purchase_paid_mismatches||0)===0],
+      ['serial / lot integrity',+(pre.invalid_serial_rows||0)===0 && +(pre.negative_lot_balances||0)===0],
+      ['test data cleaned',+(pre.test_data_residue||0)===0] 
+    ];
+    box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح فحص Go-Live النهائي':'ما زال يحتاج معالجة'}</div>`+rows.map(x=>`<div class="test-row ${x[1]?'pass':'fail'}"><span>${x[1]?'✓':'✗'}</span><b>${e(x[0])}</b><small></small></div>`).join('')+(r.stage?`<p class="muted">المرحلة: ${e(r.stage)}</p>`:'');
+  }catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}
+}
+
 async function reportsView(){const today=new Date().toISOString().slice(0,10);const [ca,sa]=await Promise.all([rpc('customer_aging',{p_as_of:today}),rpc('supplier_aging',{p_as_of:today})]);return `<h2>التقارير</h2><div class="card"><b>أعمار ديون العملاء</b>${T(['العميل','حالي','1-30','31-60','61-90','90+','رصيد غير مخصص','الصافي'],ca.map(x=>[e(x.name),fmt(x.current_amt),fmt(x.d1_30),fmt(x.d31_60),fmt(x.d61_90),fmt(x.d90_plus),fmt(x.unallocated_credit),fmt(x.total)]))}</div><div class="card"><b>أعمار ديون الموردين</b>${T(['المورد','حالي','1-30','31-60','61-90','90+','دفعات غير مخصصة','الصافي'],sa.map(x=>[e(x.name),fmt(x.current_amt),fmt(x.d1_30),fmt(x.d31_60),fmt(x.d61_90),fmt(x.d90_plus),fmt(x.unallocated_credit),fmt(x.total)]))}</div>`}
 async function accountsView(){const A=await rpc('trial_balance',{});return `<h2>الحسابات</h2><div class="card np"><button onclick="act(async()=>{const n=await rpc('rebuild_journal',{});alert('تم تحديث القيود: '+n+' مستند')})">ترحيل القيود</button><button class="s" onclick="journalForm()">قيد يومية يدوي</button></div><div class="card"><b>ميزان المراجعة</b>${T(['الكود','الحساب','النوع','مدين','دائن','الرصيد'],A.map(a=>[a.code,e(a.name),a.type,fmt(a.debit),fmt(a.credit),fmt(a.balance)]))}</div>`}
 function journalForm(){const opts=C.accounts||[];let A=opts.length?opts:[];if(!A.length){alert('الحسابات يتم تحميلها داخل شاشة الحسابات.');return}$('#app').insertAdjacentHTML('beforeend',`<div id="jm" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:grid;place-items:center;padding:15px"><div class="card" style="width:min(760px,100%)"><h3>قيد يومية يدوي</h3><input id="jd" type="date" value="${new Date().toISOString().slice(0,10)}"><input id="jx" placeholder="البيان" style="width:55%"><div id="jl"></div><button class="s" onclick="addJournalRow()">+ سطر</button><button onclick="saveJournal()">حفظ القيد</button><button class="danger" onclick="$('#jm').remove()">إغلاق</button></div></div>`);for(let i=0;i<2;i++)addJournalRow()}
@@ -292,7 +327,7 @@ async function orgView(){const [B,CC]=await Promise.all([g('branches','name'),g(
 
 async function healthView(){return `${sectionHead('فحص الجاهزية','اختبار شامل قبل Go-Live. الاختبار ينشئ بيانات مؤقتة ويقوم بتنظيفها.')}
  <div class="card health-banner"><div><b>Enterprise Health Check</b><p class="muted">يفحص التوازن المحاسبي، السالب بالمخزون، الباركودات، الفترات والاعتمادات.</p></div><button class="btn soft" onclick="runHealthCheck()">فحص سريع</button></div>
- <div id="healthBox" class="card"><p class="muted">لم يتم إجراء الفحص بعد.</p></div><div class="card"><div class="card-title"><b>اختبار شامل بكل الـworkflows</b></div><p class="muted">Purchase → GRN → Sale → Delivery → Assets → Bank → Manufacturing → POS → HR → Commissions → Cheques → Tax Docs → Integrations → Period Lock → Journal → Reports + failure paths.</p><button class="btn" onclick="runEnterpriseTest()">تشغيل الاختبار الكامل</button><div id="enterpriseTestBox" class="mt10"></div></div><div class="card"><div class="card-title"><b>اختبار المخزون الذكي</b></div><p class="muted">Batch / Expiry / Serial / MRP / CSV Import.</p><button class="btn soft" onclick="runAdvancedInventoryTest()">تشغيل الاختبار المتقدم</button><div id="advancedTestBox" class="mt10"></div></div>`}
+ <div id="healthBox" class="card"><p class="muted">لم يتم إجراء الفحص بعد.</p></div><div class="card"><div class="card-title"><b>اختبار شامل بكل الـworkflows</b></div><p class="muted">Purchase → GRN → Sale → Delivery → Assets → Bank → Manufacturing → POS → HR → Commissions → Cheques → Tax Docs → Integrations → Period Lock → Journal → Reports + failure paths.</p><button class="btn" onclick="runEnterpriseTest()">تشغيل الاختبار الكامل</button> <button class="btn soft" onclick="runFinalSuite()">اختبار Go-Live النهائي</button><div id="enterpriseTestBox" class="mt10"></div></div><div class="card"><div class="card-title"><b>اختبار المخزون الذكي</b></div><p class="muted">Batch / Expiry / Serial / MRP / CSV Import.</p><button class="btn soft" onclick="runAdvancedInventoryTest()">تشغيل الاختبار المتقدم</button><div id="advancedTestBox" class="mt10"></div></div>`}
 async function runHealthCheck(){const box=$('#healthBox');try{const r=await rpc('health_check_enterprise',{});box.innerHTML=`<div class="health-grid"><div>${chip(r.ok?'سليم':'يحتاج مراجعة',r.ok?'success':'danger')}</div><div>Duplicate barcodes: <b>${r.duplicate_barcodes}</b></div><div>Unbalanced entries: <b>${r.unbalanced_journal_entries}</b></div><div>Journal lines both sides: <b>${r.journal_lines_both_sides}</b></div><div>Negative stock: <b>${r.negative_stock_rows}</b></div><div>Negative cash: <b>${r.negative_cash_rows}</b></div><div>Sales overpaid: <b>${r.paid_over_total_sales}</b></div><div>Purchase overpaid: <b>${r.paid_over_total_purchases}</b></div><div>Pending approvals: <b>${r.pending_approvals}</b></div><div>Tax docs pending/rejected: <b>${r.pending_tax_documents}</b></div><div>Integration failures: <b>${r.failed_integrations}</b></div></div>`}catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}}
 async function runEnterpriseTest(){const box=$('#enterpriseTestBox');box.innerHTML='<p>جاري تشغيل الاختبار الشامل...</p>';try{const r=await rpc('run_erp_go_live_test',{});const rows=(r.results||[]).map(x=>`<div class="test-row ${x.pass?'pass':'fail'}"><span>${x.pass?'✓':'✗'}</span><b>${e(x.test)}</b><small>${e(x.detail||'')}</small></div>`).join('');box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح الاختبار الشامل':'فشل الاختبار'}${r.cleaned?' · تم تنظيف البيانات':''}</div>${r.error?`<div class="bad">${e(r.error)}</div>`:''}${rows}`; }catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}}
 async function runAdvancedInventoryTest(){const box=$('#advancedTestBox');if(box)box.innerHTML='<p>جاري اختبار التتبع وMRP والاستيراد...</p>';try{const r=await rpc('run_advanced_inventory_test',{});const rows=(r.results||[]).map(x=>`<div class="test-row ${x.pass?'pass':'fail'}"><span>${x.pass?'✓':'✗'}</span><b>${e(x.test)}</b><small>${e(x.detail||'')}</small></div>`).join('');if(box)box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح اختبار المخزون الذكي':'فشل الاختبار'}${r.cleaned?' · تم تنظيف البيانات':''}</div>${r.error?`<div class="bad">${e(r.error)}</div>`:''}${rows}`;}catch(x){if(box)box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}}
