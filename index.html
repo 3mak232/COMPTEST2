@@ -70,6 +70,31 @@ body.menu-open{overflow:hidden}
 }
 
 @media print{.sidebar,.topbar,.np{display:none!important}.shell{margin:0}.page{padding:0}}
+/* V10 UX hardening */
+#globalLoader{position:fixed;inset:0;background:rgba(246,248,251,.78);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:9999}
+#globalLoader.show{display:flex}
+.loader-card{min-width:220px;padding:22px 24px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 20px 60px rgba(15,23,42,.12);text-align:center}
+.loader-ring{width:44px;height:44px;border:4px solid #dbe7ff;border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+.brandmark.loading{position:relative}
+.brandmark.loading:after{content:"";position:absolute;inset:-5px;border:2px solid rgba(37,99,235,.18);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+.loading-host{position:relative}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;background:#101828;color:#fff;padding:11px 16px;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);transition:.2s;z-index:10000}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media(max-width:780px){
+  .page{padding:14px 12px 86px}
+  .topbar{height:62px}
+  .top-search{width:calc(100vw - 120px);min-width:0}
+  .hero h2{font-size:21px}
+  .kpis{gap:8px}
+  .kpi{padding:13px}
+  .kpi strong{font-size:20px}
+  .row>*{flex:1 1 100%;min-width:0}
+  .row .btn,.row button{flex:1 1 auto}
+  .filterbar{flex-wrap:wrap}
+}
+
 
 
 /* V9 final responsive hardening */
@@ -95,13 +120,27 @@ html,body{overflow-x:hidden}.login-page{min-height:100dvh;width:100%;display:gri
 
 </style>
 </head>
-<body><div id="app"></div>
+<body><div id="app"></div><div id="globalLoader" aria-live="polite"><div class="loader-card"><div class="loader-ring"></div><b id="loaderTitle">جاري التحميل...</b><div class="muted" id="loaderText">من فضلك انتظر</div></div></div><div id="toast" class="toast"></div>
 <script>
 const URL_='https://bfphfnwxchrgjiprvhqi.supabase.co',KEY='sb_publishable_yTEovIdpH1ozZKLCm09-jw_wecQa8as';
 const sb=supabase.createClient(URL_,KEY);
-let me=null,view='dash',C={},cart={s:[],p:[],q:[],t:[]},RT=null,st='',tests=null,per='month',d1='',d2='',payInvoices=[],stk=null;
+let me=null,view=localStorage.getItem('erp_v_view')||'dash',C={},cart={s:[],p:[],q:[],t:[]},RT=null,st='',tests=null,per='month',d1='',d2='',payInvoices=[],stk=null;
 const $=s=>document.querySelector(s),v=id=>{const x=$('#'+id);return x?x.value:''},n=id=>+v(id)||0,e=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=x=>(+x||0).toLocaleString('ar-EG',{maximumFractionDigits:2});
+let _busy=0,_loaderTimer=null;
+function setLoading(on,title='جاري التحميل...',text='من فضلك انتظر') {
+  const box=$('#globalLoader'); const mark=document.querySelector('.brandmark');
+  _busy=Math.max(0,_busy+(on?1:-1));
+  if(on){ if(_loaderTimer)clearTimeout(_loaderTimer); _loaderTimer=setTimeout(()=>{if(box){$('#loaderTitle').textContent=title;$('#loaderText').textContent=text;box.classList.add('show')} mark?.classList.add('loading')},120);}
+  else { _busy=Math.max(0,_busy-1); if(_busy===0){ if(_loaderTimer)clearTimeout(_loaderTimer); box?.classList.remove('show'); mark?.classList.remove('loading'); }}
+}
+function withLoading(fn,title='جاري المعالجة...',text='يتم حفظ البيانات بأمان') {
+  setLoading(true,title,text);
+  return Promise.resolve().then(fn).finally(()=>setLoading(false));
+}
+function toast(msg){const t=$('#toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+function go(vw){view=vw;localStorage.setItem('erp_v_view',vw);closeMobileNav?.();R()}
+
 const P={admin:'*',accountant:['dash','prod','cust','supp','sales','purch','po','grn','dn','pay','exp','cash','trf','ret','quo','ord','stmt','emp','prl','asset','bank','price','rep','jr','stk','period','appr','chk','comm','taxdoc','org','health','audit'],sales:['dash','prod','cust','sales','dn','ret','quo','ord','stmt','price','comm','taxdoc','appr'],store:['dash','prod','purch','po','grn','dn','ret','trf','stk','mfg']};
 const can=x=>me&&(P[me.role]==='*'||P[me.role].includes(x));
 const NAV=[['dash','الرئيسية'],['prod','المنتجات'],['cust','العملاء'],['supp','الموردون'],['sales','المبيعات'],['dn','أذونات التسليم'],['purch','المشتريات'],['po','أوامر الشراء'],['grn','استلامات المشتريات'],['ret','المرتجعات'],['quo','عروض الأسعار'],['ord','أوامر البيع'],['stmt','كشف الحساب'],['pay','المدفوعات'],['exp','المصروفات'],['cash','الخزينة'],['bank','البنوك والتسويات'],['trf','تحويل مخزني'],['stk','الجرد'],['price','قوائم الأسعار'],['comm','العمولات'],['asset','الأصول الثابتة'],['emp','الموظفون'],['hr','الحضور والإجازات'],['prl','المرتبات'],['mfg','التصنيع'],['pos','نقطة البيع'],['proj','المشروعات والخدمات'],['org','الفروع ومراكز التكلفة'],['period','الفترات المالية'],['appr','الاعتمادات'],['chk','الشيكات'],['taxdoc','المستندات الضريبية'],['int','التكاملات'],['rep','التقارير'],['jr','الحسابات'],['health','فحص الجاهزية'],['users','المستخدمون'],['audit','سجل العمليات'],['set','الإعدادات']];
@@ -112,7 +151,7 @@ const g=async(t,o,sel='*')=>{let q=sb.from(t).select(sel);if(o)q=q.order(o);cons
 const T=(h,r)=>`<div class="tw"><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${r.map(x=>`<tr>${x.map(y=>`<td>${y}</td>`).join('')}</tr>`).join('')}</table></div>`;
 const O=a=>(a||[]).map(x=>`<option value="${x.id}">${e(x.name)}</option>`).join('');
 const by=(a,i)=>a.find(x=>x.id==i)||{}; const stkQty=p=>C.stock.filter(s=>s.product_id==p).reduce((a,s)=>a+ +s.qty,0);
-async function act(f){try{await f();await loadAll();await R()}catch(x){alert(x.message||x.error_description||x)}}
+async function act(f){const keep=view;return withLoading(async()=>{try{await f();await loadAll();toast('تمت العملية بنجاح')}catch(x){alert(x.message||x.error_description||x);throw x}finally{view=keep;localStorage.setItem('erp_v_view',keep);await R()}})}
 function range(){const t=new Date(),f=x=>x.toISOString().slice(0,10);if(per==='today')return[f(t),f(t)];if(per==='week'){const s=new Date(t);s.setDate(t.getDate()-6);return[f(s),f(t)]}if(per==='custom')return[d1||f(t),d2||f(t)];return[f(new Date(t.getFullYear(),t.getMonth(),1)),f(t)]}
 async function loadAll(){
   const finance=me&&(me.role==='admin'||me.role==='accountant');
@@ -166,7 +205,7 @@ async function traceView(){const TP=C.products.filter(p=>p.active&&(p.track_batc
 <div class="card"><div class="card-title"><b>رصيد التشغيلات</b></div>${lots.length?T(['الصنف','التشغيلة','الصلاحية','المخزن','الكمية','الحالة'],lots.map(x=>[e(by(C.products,x.product_id).name),e(x.lot_no),x.expiry_date||'—',e(by(C.warehouses,x.warehouse_id).name),fmt(x.qty),x.expired?chip('منتهي','danger'):chip('سليم','success')])):'<div class="empty">لا توجد تشغيلات.</div>'}</div>
 <div class="card"><div class="card-title"><b>Serials</b></div>${serials.length?T(['الصنف','Serial','الحالة','المخزن','الصلاحية'],serials.slice(0,200).map(x=>[e(by(C.products,x.product_id).name),e(x.serial_no),chip(x.status,x.status==='Available'?'success':'warning'),e(by(C.warehouses,x.warehouse_id).name)||'—',x.expired?chip('منتهي','danger'):'—'])):'<div class="empty">لا توجد Serials.</div>'}</div>
 <div class="card"><div class="card-title"><b>MRP / اقتراحات إعادة التوريد</b></div>${mrp.length?T(['الصنف','المخزن','متاح','وارد','محجوز','المتوقع','الحد','Safety','اقتراح الشراء','Lead Time'],mrp.slice(0,200).map(x=>[e(x.product_name),e(by(C.warehouses,x.warehouse_id).name),fmt(x.on_hand),fmt(x.incoming),fmt(x.committed),fmt(x.projected),fmt(x.min_stock),fmt(x.safety_stock),fmt(x.suggested_qty),x.lead_time_days])):'<div class="empty success">لا توجد اقتراحات إعادة توريد حاليًا.</div>'}</div>`}
-async function runFinalSuite(){
+async function runFinalSuite(){return withLoading(async()=>{
   const box=$('#enterpriseTestBox');
   box.innerHTML='<p>جاري تشغيل فحص Go-Live النهائي...</p>';
   try{
@@ -186,7 +225,7 @@ async function runFinalSuite(){
     ];
     box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح فحص Go-Live النهائي':'ما زال يحتاج معالجة'}</div>`+rows.map(x=>`<div class="test-row ${x[1]?'pass':'fail'}"><span>${x[1]?'✓':'✗'}</span><b>${e(x[0])}</b><small></small></div>`).join('')+(r.stage?`<p class="muted">المرحلة: ${e(r.stage)}</p>`:'');
   }catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}
-}
+},'جاري فحص Go-Live النهائي...','يتم اختبار الأمان والعمليات والتكاملات')}
 
 async function reportsView(){const today=new Date().toISOString().slice(0,10);const [ca,sa]=await Promise.all([rpc('customer_aging',{p_as_of:today}),rpc('supplier_aging',{p_as_of:today})]);return `<h2>التقارير</h2><div class="card"><b>أعمار ديون العملاء</b>${T(['العميل','حالي','1-30','31-60','61-90','90+','رصيد غير مخصص','الصافي'],ca.map(x=>[e(x.name),fmt(x.current_amt),fmt(x.d1_30),fmt(x.d31_60),fmt(x.d61_90),fmt(x.d90_plus),fmt(x.unallocated_credit),fmt(x.total)]))}</div><div class="card"><b>أعمار ديون الموردين</b>${T(['المورد','حالي','1-30','31-60','61-90','90+','دفعات غير مخصصة','الصافي'],sa.map(x=>[e(x.name),fmt(x.current_amt),fmt(x.d1_30),fmt(x.d31_60),fmt(x.d61_90),fmt(x.d90_plus),fmt(x.unallocated_credit),fmt(x.total)]))}</div>`}
 async function accountsView(){const A=await rpc('trial_balance',{});return `<h2>الحسابات</h2><div class="card np"><button onclick="act(async()=>{const n=await rpc('rebuild_journal',{});alert('تم تحديث القيود: '+n+' مستند')})">ترحيل القيود</button><button class="s" onclick="journalForm()">قيد يومية يدوي</button></div><div class="card"><b>ميزان المراجعة</b>${T(['الكود','الحساب','النوع','مدين','دائن','الرصيد'],A.map(a=>[a.code,e(a.name),a.type,fmt(a.debit),fmt(a.credit),fmt(a.balance)]))}</div>`}
@@ -208,25 +247,6 @@ async function settingsView(){const{data:s,error}=await sb.from('company_setting
 async function runSmokeTest(){const box=$('#smokeResult');if(box)box.innerHTML='<p>جاري الاختبار...</p>';try{const r=await rpc('run_erp_smoke_test',{});const show=z=>typeof z==='object'&&z!==null?JSON.stringify(z):String(z??'');const rows=(r.results||[]).map(x=>{const p=x.pass?'✓':'✗';const vals=Object.entries(x).filter(([k])=>!['test','pass'].includes(k)).map(([k,v])=>`${e(k)}=${e(show(v))}`).join(' | ');return`<div class="${x.pass?'good':'bad'}">${p} ${e(x.test)}${vals?' — '+vals:''}</div>`}).join('');if(box)box.innerHTML=`<div class="card"><b class="${r.ok?'good':'bad'}">${r.ok?'نجح اختبار النظام بالكامل':'فشل اختبار النظام'}</b>${rows}<p>تم تنظيف بيانات الاختبار: ${r.cleaned?'نعم':'لا'}</p></div>`}catch(x){if(box)box.innerHTML=`<div class="card bad">فشل تشغيل الاختبار: ${e(x.message||x)}</div>`}}
 function openMobileNav(){const s=document.querySelector('.sidebar');const o=document.querySelector('.mobile-overlay');if(s)s.classList.add('open');if(o)o.classList.add('open');document.body.classList.add('menu-open')}
 function closeMobileNav(){const s=document.querySelector('.sidebar');const o=document.querySelector('.mobile-overlay');if(s)s.classList.remove('open');if(o)o.classList.remove('open');document.body.classList.remove('menu-open')}
-async function R(q){
-  closeMobileNav();
-  if(!me){$('#app').innerHTML=`<main><div class="card" style="max-width:360px;margin:60px auto"><h2>تسجيل الدخول</h2><input id="lu" type="email" placeholder="البريد" style="width:95%"><input id="lp" type="password" placeholder="كلمة المرور" style="width:95%"><button onclick="login()" style="width:95%">دخول</button><button class="s" onclick="signup()" style="width:95%">إنشاء حساب (الأول = مدير)</button></div></main>`;return}
-  if(!me.active){$('#app').innerHTML=`<main><div class="card"><h2>حسابك بانتظار التفعيل من المدير</h2><button onclick="logout()">خروج</button></div></main>`;return}
-  if(!can(view))view='dash';await loadAll();if(view==='jr')await ensureAccounts();
-  let h='';
-  if(view==='dash')h=await dash();
-  else if(view==='prod')h=productsView(); else if(view==='cust')h=masterForm('cust'); else if(view==='supp')h=masterForm('supp');
-  else if(view==='sales')h=(await invoiceView(true)).replace('onclick="act(async()=>{const paid=n(\'ipd\'),account=v(\'ia\');await rpc(\'create_sale\',s?{s}:{s})})"','onclick="act(()=>saveInvoice(true))"');
-  else if(view==='purch')h=(await invoiceView(false)).replace('onclick="act(async()=>{const paid=n(\'ipd\'),account=v(\'ia\');await rpc(\'create_purchase\',s?{s}:{s})})"','onclick="act(()=>saveInvoice(false))"');
-  else if(view==='pay')h=await payView(); else if(view==='trf')h=await transferView(); else if(view==='stk')h=await stocktakeView();
-  else if(view==='ret')h=await retView(); else if(view==='quo')h=await quotationsView(); else if(view==='ord')h=await ordersView(); else if(view==='stmt')h=await stmtView();
-  else if(view==='exp'){const L=await g('expenses','date');h=`<h2>المصروفات</h2><div class="card np"><select id="ec"><option>إيجار</option><option>كهرباء</option><option>مياه</option><option>إنترنت</option><option>رواتب</option><option>نقل</option><option>صيانة</option><option>تسويق</option><option>أخرى</option></select><input id="ed" placeholder="الوصف"><input id="ea" type="number" placeholder="المبلغ"><select id="ex">${O(C.accts)}</select><button onclick="act(()=>rpc('create_expense',{p_category:v('ec'),p_desc:v('ed'),p_amount:n('ea'),p_account:v('ex')}))">حفظ</button></div><div class="card">${T(['التاريخ','التصنيف','الوصف','المبلغ'],L.reverse().map(x=>[x.date,x.category,e(x.description),fmt(x.amount)]))}</div>`}
-  else if(view==='cash')h=`<h2>الخزينة</h2><div class="card np"><input id="an" placeholder="اسم حساب"><input id="ao" type="number" placeholder="رصيد افتتاحي"><button onclick="act(()=>ins('cash_accounts',{name:v('an'),opening_balance:n('ao'),balance:n('ao')}))">إضافة</button></div><div class="card"><b>الحسابات</b>${T(['الحساب','الرصيد'],C.accts.map(a=>[e(a.name),fmt(a.balance)]))}</div>`;
-  else if(view==='emp')h=await employeesView(); else if(view==='prl')h=await payrollView(); else if(view==='rep')h=await reportsView(); else if(view==='jr')h=await accountsView();
-  else if(view==='users')h=await usersView(); else if(view==='audit')h=await auditView(); else if(view==='set')h=await settingsView();
-  $('#app').innerHTML=`<nav class="np"><b class="brand" style="display:block;padding:8px 8px 14px">${e(me.name)}<div class="muted" style="font-size:11px">${e(me.role)}</div></b>${NAV.filter(x=>can(x[0])).map(x=>`<a class="${view===x[0]?'on':''}" onclick="view='${x[0]}';R()">${x[1]}</a>`).join('')}<a onclick="logout()">خروج</a></nav><main>${h}</main>`;
-  if(q){const i=$('#q');if(i){i.focus();i.setSelectionRange(99,99)}}
-}
 // --- Enterprise UI layer ---
 const navOld = [['dash','الرئيسية'],['prod','المنتجات'],['cust','العملاء'],['supp','الموردون'],['sales','المبيعات'],['purch','المشتريات'],['ret','المرتجعات'],['quo','عروض الأسعار'],['ord','أوامر البيع'],['stmt','كشف الحساب'],['pay','المدفوعات'],['exp','المصروفات'],['cash','الخزينة'],['trf','تحويل مخزني'],['stk','الجرد'],['emp','الموظفون'],['prl','المرتبات'],['rep','التقارير'],['jr','الحسابات'],['users','المستخدمون'],['audit','سجل العمليات'],['set','الإعدادات']];
 const NAV2=[
@@ -257,11 +277,11 @@ async function dash(){
  const finance=me.role==='admin'||me.role==='accountant';
  let recent=[]; try{recent=await g('sales_invoice_balances','date');recent=recent.slice(-8).reverse()}catch{}
  const K=(label,value,icon,kind='')=>`<div class="kpi ${kind}"><div class="kpi-top"><span>${icon}</span><small>${label}</small></div><strong>${finance && typeof value==='number' ? fmt(value) : value}</strong></div>`;
- return `<div class="hero"><div><div class="eyebrow">ERP V6 · Enterprise</div><h2>مرحبًا ${e(me.name)} 👋</h2><p>مركز موحّد لإدارة المبيعات، المشتريات، المخزون والمحاسبة.</p></div><div class="hero-actions">${actionBtn('فاتورة مبيعات',"view='sales';R()")}${actionBtn('تحويل مخزني',"view='trf';R()",'soft')}${me.role==='admin'?actionBtn('اختبار النظام',"view='health';R()",'soft'):''}</div></div>
+ return `<div class="hero"><div><div class="eyebrow">ERP V6 · Enterprise</div><h2>مرحبًا ${e(me.name)} 👋</h2><p>مركز موحّد لإدارة المبيعات، المشتريات، المخزون والمحاسبة.</p></div><div class="hero-actions">${actionBtn('فاتورة مبيعات',"go('sales')")}${actionBtn('تحويل مخزني',"go('trf')",'soft')}${me.role==='admin'?actionBtn('اختبار النظام',"go('health')",'soft'):''}</div></div>
  <div class="filterbar"><select id="per" onchange="per=v('per');R()">${[['today','اليوم'],['week','آخر 7 أيام'],['month','هذا الشهر'],['custom','فترة مخصصة']].map(x=>`<option value="${x[0]}" ${per===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select>${per==='custom'?`<input type="date" id="d1" value="${a}" onchange="d1=v('d1');R()"><input type="date" id="d2" value="${b}" onchange="d2=v('d2');R()">`:''}</div>
  <div class="kpis">${K('المبيعات',D.sales,'↗','blue')}${finance?K('المشتريات',D.purchases,'↙','purple'):''}${finance?K('المصروفات',D.expenses,'−','orange'):''}${finance?K('الربح المبدئي',D.sales-D.cogs-D.expenses,'≡','green'):''}${finance?K('مستحق العملاء',D.receivables,'◷','red'):''}${finance?K('مستحق الموردين',D.payables,'◷','amber'):''}${K('الأصناف',D.products,'▦','teal')}${K('منخفض المخزون',D.low_stock,'!','red')}</div>
- <div class="dash-grid"><div class="card"><div class="card-title"><b>آخر فواتير المبيعات</b><button class="linkbtn" onclick="view='sales';R()">عرض الكل</button></div>${recent.length?T(['الفاتورة','التاريخ','الإجمالي','المتبقي'],recent.map(x=>[e(x.number),x.date,money(x.total),money(x.outstanding)])):'<div class="empty">لا توجد فواتير بعد.</div>'}</div><div class="card"><div class="card-title"><b>تنبيهات المخزون</b><button class="linkbtn" onclick="view='prod';R()">إدارة الأصناف</button></div>${low.length?low.slice(0,8).map(p=>`<div class="alert-row"><div><b>${e(p.name)}</b><span>متاح ${fmt(p.stock)} / الحد ${fmt(p.min_stock)}</span></div>${chip('إعادة طلب','danger')}</div>`).join(''):'<div class="empty success">المخزون ضمن الحدود الدنيا.</div>'}</div></div>
- <div class="card quick"><div class="card-title"><b>وصول سريع</b></div><div class="quick-grid">${actionBtn('أمر شراء',"view='po';R()",'soft')}${actionBtn('استلام بضاعة',"view='grn';R()",'soft')}${actionBtn('أصل ثابت',"view='asset';R()",'soft')}${actionBtn('قيد يومية',"view='jr';R()",'soft')}${actionBtn('تقرير الأرباح',"view='rep';R()",'soft')}${actionBtn('فحص النظام',"view='health';R()",'soft')}</div></div>`;
+ <div class="dash-grid"><div class="card"><div class="card-title"><b>آخر فواتير المبيعات</b><button class="linkbtn" onclick="go('sales')">عرض الكل</button></div>${recent.length?T(['الفاتورة','التاريخ','الإجمالي','المتبقي'],recent.map(x=>[e(x.number),x.date,money(x.total),money(x.outstanding)])):'<div class="empty">لا توجد فواتير بعد.</div>'}</div><div class="card"><div class="card-title"><b>تنبيهات المخزون</b><button class="linkbtn" onclick="go('prod')">إدارة الأصناف</button></div>${low.length?low.slice(0,8).map(p=>`<div class="alert-row"><div><b>${e(p.name)}</b><span>متاح ${fmt(p.stock)} / الحد ${fmt(p.min_stock)}</span></div>${chip('إعادة طلب','danger')}</div>`).join(''):'<div class="empty success">المخزون ضمن الحدود الدنيا.</div>'}</div></div>
+ <div class="card quick"><div class="card-title"><b>وصول سريع</b></div><div class="quick-grid">${actionBtn('أمر شراء',"go('po')",'soft')}${actionBtn('استلام بضاعة',"go('grn')",'soft')}${actionBtn('أصل ثابت',"go('asset')",'soft')}${actionBtn('قيد يومية',"go('jr')",'soft')}${actionBtn('تقرير الأرباح',"go('rep')",'soft')}${actionBtn('فحص النظام',"go('health')",'soft')}</div></div>`;
 }
 
 async function poView(){
@@ -328,9 +348,9 @@ async function orgView(){const [B,CC]=await Promise.all([g('branches','name'),g(
 async function healthView(){return `${sectionHead('فحص الجاهزية','اختبار شامل قبل Go-Live. الاختبار ينشئ بيانات مؤقتة ويقوم بتنظيفها.')}
  <div class="card health-banner"><div><b>Enterprise Health Check</b><p class="muted">يفحص التوازن المحاسبي، السالب بالمخزون، الباركودات، الفترات والاعتمادات.</p></div><button class="btn soft" onclick="runHealthCheck()">فحص سريع</button></div>
  <div id="healthBox" class="card"><p class="muted">لم يتم إجراء الفحص بعد.</p></div><div class="card"><div class="card-title"><b>اختبار شامل بكل الـworkflows</b></div><p class="muted">Purchase → GRN → Sale → Delivery → Assets → Bank → Manufacturing → POS → HR → Commissions → Cheques → Tax Docs → Integrations → Period Lock → Journal → Reports + failure paths.</p><button class="btn" onclick="runEnterpriseTest()">تشغيل الاختبار الكامل</button> <button class="btn soft" onclick="runFinalSuite()">اختبار Go-Live النهائي</button><div id="enterpriseTestBox" class="mt10"></div></div><div class="card"><div class="card-title"><b>اختبار المخزون الذكي</b></div><p class="muted">Batch / Expiry / Serial / MRP / CSV Import.</p><button class="btn soft" onclick="runAdvancedInventoryTest()">تشغيل الاختبار المتقدم</button><div id="advancedTestBox" class="mt10"></div></div>`}
-async function runHealthCheck(){const box=$('#healthBox');try{const r=await rpc('health_check_enterprise',{});box.innerHTML=`<div class="health-grid"><div>${chip(r.ok?'سليم':'يحتاج مراجعة',r.ok?'success':'danger')}</div><div>Duplicate barcodes: <b>${r.duplicate_barcodes}</b></div><div>Unbalanced entries: <b>${r.unbalanced_journal_entries}</b></div><div>Journal lines both sides: <b>${r.journal_lines_both_sides}</b></div><div>Negative stock: <b>${r.negative_stock_rows}</b></div><div>Negative cash: <b>${r.negative_cash_rows}</b></div><div>Sales overpaid: <b>${r.paid_over_total_sales}</b></div><div>Purchase overpaid: <b>${r.paid_over_total_purchases}</b></div><div>Pending approvals: <b>${r.pending_approvals}</b></div><div>Tax docs pending/rejected: <b>${r.pending_tax_documents}</b></div><div>Integration failures: <b>${r.failed_integrations}</b></div></div>`}catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}}
-async function runEnterpriseTest(){const box=$('#enterpriseTestBox');box.innerHTML='<p>جاري تشغيل الاختبار الشامل...</p>';try{const r=await rpc('run_erp_go_live_test',{});const rows=(r.results||[]).map(x=>`<div class="test-row ${x.pass?'pass':'fail'}"><span>${x.pass?'✓':'✗'}</span><b>${e(x.test)}</b><small>${e(x.detail||'')}</small></div>`).join('');box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح الاختبار الشامل':'فشل الاختبار'}${r.cleaned?' · تم تنظيف البيانات':''}</div>${r.error?`<div class="bad">${e(r.error)}</div>`:''}${rows}`; }catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}}
-async function runAdvancedInventoryTest(){const box=$('#advancedTestBox');if(box)box.innerHTML='<p>جاري اختبار التتبع وMRP والاستيراد...</p>';try{const r=await rpc('run_advanced_inventory_test',{});const rows=(r.results||[]).map(x=>`<div class="test-row ${x.pass?'pass':'fail'}"><span>${x.pass?'✓':'✗'}</span><b>${e(x.test)}</b><small>${e(x.detail||'')}</small></div>`).join('');if(box)box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح اختبار المخزون الذكي':'فشل الاختبار'}${r.cleaned?' · تم تنظيف البيانات':''}</div>${r.error?`<div class="bad">${e(r.error)}</div>`:''}${rows}`;}catch(x){if(box)box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}}
+async function runHealthCheck(){return withLoading(async()=>{const box=$('#healthBox');try{const r=await rpc('health_check_enterprise',{});box.innerHTML=`<div class="health-grid"><div>${chip(r.ok?'سليم':'يحتاج مراجعة',r.ok?'success':'danger')}</div><div>Duplicate barcodes: <b>${r.duplicate_barcodes}</b></div><div>Unbalanced entries: <b>${r.unbalanced_journal_entries}</b></div><div>Journal lines both sides: <b>${r.journal_lines_both_sides}</b></div><div>Negative stock: <b>${r.negative_stock_rows}</b></div><div>Negative cash: <b>${r.negative_cash_rows}</b></div><div>Sales overpaid: <b>${r.paid_over_total_sales}</b></div><div>Purchase overpaid: <b>${r.paid_over_total_purchases}</b></div><div>Pending approvals: <b>${r.pending_approvals}</b></div><div>Tax docs pending/rejected: <b>${r.pending_tax_documents}</b></div><div>Integration failures: <b>${r.failed_integrations}</b></div></div>`}catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}finally{}},'جاري الفحص...','جارٍ التحقق من صحة قاعدة البيانات')}
+async function runEnterpriseTest(){return withLoading(async()=>{const box=$('#enterpriseTestBox');box.innerHTML='<p>جاري تشغيل الاختبار الشامل...</p>';try{const r=await rpc('run_erp_go_live_test',{});const rows=(r.results||[]).map(x=>`<div class="test-row ${x.pass?'pass':'fail'}"><span>${x.pass?'✓':'✗'}</span><b>${e(x.test)}</b><small>${e(x.detail||'')}</small></div>`).join('');box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح الاختبار الشامل':'فشل الاختبار'}${r.cleaned?' · تم تنظيف البيانات':''}</div>${r.error?`<div class="bad">${e(r.error)}</div>`:''}${rows}`; }catch(x){box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}finally{}},'جاري اختبار النظام...','يتم تشغيل سيناريوهات الـERP')}
+async function runAdvancedInventoryTest(){return withLoading(async()=>{const box=$('#advancedTestBox');if(box)box.innerHTML='<p>جاري اختبار التتبع وMRP والاستيراد...</p>';try{const r=await rpc('run_advanced_inventory_test',{});const rows=(r.results||[]).map(x=>`<div class="test-row ${x.pass?'pass':'fail'}"><span>${x.pass?'✓':'✗'}</span><b>${e(x.test)}</b><small>${e(x.detail||'')}</small></div>`).join('');if(box)box.innerHTML=`<div class="test-summary ${r.ok?'ok':'fail'}">${r.ok?'نجح اختبار المخزون الذكي':'فشل الاختبار'}${r.cleaned?' · تم تنظيف البيانات':''}</div>${r.error?`<div class="bad">${e(r.error)}</div>`:''}${rows}`;}catch(x){if(box)box.innerHTML=`<div class="bad">${e(x.message||x)}</div>`}finally{}},'جاري اختبار المخزون...','يتم اختبار Batch / Serial / MRP')}
 
 async function reportsView(){const today=new Date().toISOString().slice(0,10);const [ca,sa,tb,bs,inv,sales,cf]=await Promise.all([rpc('customer_aging',{p_as_of:today}),rpc('supplier_aging',{p_as_of:today}),rpc('trial_balance',{}),rpc('balance_sheet',{p_as_of:today}),rpc('inventory_valuation',{}),rpc('sales_by_customer',{p_from:today.slice(0,8)+'01',p_to:today}),rpc('cashflow_summary',{p_from:today.slice(0,8)+'01',p_to:today})]);return `${sectionHead('التقارير والتحليلات','تقارير تشغيلية ومالية من نفس مصدر البيانات.')}
  <div class="report-cards"><div class="card"><b>ميزان المراجعة</b>${T(['الحساب','مدين','دائن','الرصيد'],tb.map(x=>[e(x.name),money(x.debit),money(x.credit),money(Math.abs(x.balance))]))}</div><div class="card"><b>المركز المالي</b>${T(['الحساب','النوع','الرصيد'],bs.map(x=>[e(x.name),x.type,money(Math.abs(x.balance))]))}</div></div>
@@ -357,10 +377,12 @@ async function legacyHtml(){
   return '';
 }
 async function R(q){
+  localStorage.setItem('erp_v_view',view);
   if(!me){return _loginScreen()}
   if(!me.active){return _inactiveScreen()}
   if(!can(view))view='dash';
-  await loadAll();
+  localStorage.setItem('erp_v_view',view);
+  await withLoading(()=>loadAll(),'جاري فتح الصفحة...',`يتم تحميل ${e(NAV.find(x=>x[0]===view)?.[1]||'الصفحة')}`);
   let h='';
   try{
     if(view==='dash')h=await dash(); else if(view==='po')h=await poView(); else if(view==='grn')h=await grnView(); else if(view==='dn')h=await dnView();
@@ -370,17 +392,18 @@ async function R(q){
     else if(view==='appr')h=await approvalView(); else if(view==='chk')h=await chequeView(); else if(view==='comm')h=await commissionView(); else if(view==='taxdoc')h=await taxdocView(); else if(view==='int')h=await integrationsView(); else if(view==='org')h=await orgView(); else h=await legacyHtml();
     if(!h)h='<div class="card">صفحة غير متاحة.</div>';
   }catch(x){h=`<div class="card error-card"><b>تعذر تحميل الصفحة</b><p>${e(x.message||x)}</p></div>`}
-  const links=NAV.filter(x=>can(x[0])).map(x=>`<a class="${view===x[0]?'on':''}" onclick="view='${x[0]}';closeMobileNav();R()"><span>${x[1]}</span></a>`).join('');
-  $('#app').innerHTML=`<div class="mobile-overlay" onclick="closeMobileNav()"></div><aside class="sidebar"><div class="brandbox"><div class="brandmark">E</div><div><b>ERP Enterprise</b><small>Finance · Inventory · Operations</small></div></div><div class="userbox"><div class="avatar">${e((me.name||'U').slice(0,1))}</div><div><b>${e(me.name)}</b><small>${e(me.role)}</small></div></div><nav>${links}</nav><div class="side-bottom"><button class="sidebtn" onclick="view='set';closeMobileNav();R()">الإعدادات</button><button class="sidebtn danger-link" onclick="closeMobileNav();logout()">تسجيل الخروج</button></div></aside><main class="shell"><header class="topbar"><button class="mobile-menu-btn" onclick="openMobileNav()" aria-label="فتح القائمة">☰</button><div class="top-search"><span>⌕</span><input placeholder="بحث سريع في النظام" onkeydown="if(event.key==='Enter'){window._q=this.value;view='prod';R()}"/></div><div class="top-actions">${me.role==='admin'?'<button class="iconbtn" title="فحص الجاهزية" onclick="view=\'health\';R()">✓</button>':''}<button class="role-pill">${e(me.role)}</button></div></header><div class="page">${h}</div><div class="mobile-bottom">${NAV.filter(x=>can(x[0])).filter(x=>['dash','sales','purch','pay','trace'].includes(x[0])).map(x=>`<button class="${view===x[0]?'active':''}" onclick="view='${x[0]}';R()">${x[1]}</button>`).join('')}</div></main>`;
+  const links=NAV.filter(x=>can(x[0])).map(x=>`<a class="${view===x[0]?'on':''}" onclick="go('${x[0]}')"><span>${x[1]}</span></a>`).join('');
+  $('#app').innerHTML=`<div class="mobile-overlay" onclick="closeMobileNav()"></div><aside class="sidebar"><div class="brandbox"><div class="brandmark">E</div><div><b>ERP Enterprise</b><small>Finance · Inventory · Operations</small></div></div><div class="userbox"><div class="avatar">${e((me.name||'U').slice(0,1))}</div><div><b>${e(me.name)}</b><small>${e(me.role)}</small></div></div><nav>${links}</nav><div class="side-bottom"><button class="sidebtn" onclick="go('set')">الإعدادات</button><button class="sidebtn danger-link" onclick="closeMobileNav();logout()">تسجيل الخروج</button></div></aside><main class="shell"><header class="topbar"><button class="mobile-menu-btn" onclick="openMobileNav()" aria-label="فتح القائمة">☰</button><div class="top-search"><span>⌕</span><input placeholder="بحث سريع في النظام" onkeydown="if(event.key==='Enter'){window._q=this.value;go('prod')}"/></div><div class="top-actions">${me.role==='admin'?'<button class="iconbtn" title="فحص الجاهزية" onclick="view=\'health\';R()">✓</button>':''}<button class="role-pill">${e(me.role)}</button></div></header><div class="page">${h}</div><div class="mobile-bottom">${NAV.filter(x=>can(x[0])).filter(x=>['dash','sales','purch','pay','trace'].includes(x[0])).map(x=>`<button class="${view===x[0]?'active':''}" onclick="go('${x[0]}')">${x[1]}</button>`).join('')}</div></main>`;
   if(q){const i=$('#q');if(i){i.focus();i.setSelectionRange(99,99)}}
 }
 function _loginScreen(){$('#app').innerHTML=`<div class="login-page"><section class="login-card"><div class="login-brand"><div class="brandmark">E</div><div><b>ERP Enterprise</b><small>منظومة إدارة الأعمال</small></div></div><h2>تسجيل الدخول</h2><p class="login-sub">ادخل إلى لوحة إدارة الشركة</p><div class="login-field"><label for="lu">البريد الإلكتروني</label><input id="lu" type="email" autocomplete="email" placeholder="name@company.com"></div><div class="login-field"><label for="lp">كلمة المرور</label><input id="lp" type="password" autocomplete="current-password" placeholder="••••••••"></div><div class="login-actions"><button class="btn" style="width:100%;min-height:48px" onclick="login()">دخول</button><button class="btn soft" style="width:100%;min-height:48px" onclick="signup()">إنشاء حساب جديد</button></div><p class="login-note">الحساب الأول في المشروع الجديد يُنشأ كمدير حسب إعدادات قاعدة البيانات.</p></section></div>`}
-function _inactiveScreen(){$('#app').innerHTML=`<main><div class="card" style="max-width:520px;margin:80px auto;text-align:center"><h2>الحساب بانتظار التفعيل</h2><p class="muted">سيتطلب الحساب تفعيل المدير قبل استخدام النظام.</p><button class="btn" onclick="logout()">خروج</button></div></main>`}
-async function login(){const{error}=await sb.auth.signInWithPassword({email:v('lu'),password:v('lp')});if(error)return alert(error.message);await boot()}
-async function signup(){const{error}=await sb.auth.signUp({email:v('lu'),password:v('lp')});if(error)return alert(error.message);alert('تم إنشاء الحساب. أكد البريد إذا كان التأكيد مفعلاً.')}
+function _inactiveScreen(){$('#app').innerHTML=`<div class="login-page"><section class="login-card"><div class="login-brand"><div class="brandmark">E</div><div><b>ERP Enterprise</b><small>منظومة إدارة الأعمال</small></div></div><h2>الحساب بانتظار التفعيل</h2><p class="login-sub">سيتطلب الحساب تفعيل المدير قبل استخدام النظام.</p><button class="btn" style="width:100%;min-height:48px" onclick="logout()">خروج</button></section></div>`}
+async function login(){return withLoading(async()=>{const{error}=await sb.auth.signInWithPassword({email:v('lu'),password:v('lp')});if(error)throw error;await boot()},'جاري تسجيل الدخول...','جارٍ الاتصال بالنظام بأمان')}
+async function signup(){return withLoading(async()=>{const{error}=await sb.auth.signUp({email:v('lu'),password:v('lp')});if(error)throw error;alert('تم إنشاء الحساب. أكد البريد إذا كان التأكيد مفعلاً.')},'جاري إنشاء الحساب...','جارٍ تجهيز حسابك')}
 async function logout(){await sb.auth.signOut();me=null;R()}
 async function boot(){const{data:{user}}=await sb.auth.getUser();me=null;if(user){const{data,error}=await sb.from('profiles').select('*').eq('id',user.id).single();if(!error)me=data}R()}
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape')closeMobileNav()});
-sb.auth.getSession().then(boot);
+document.querySelector('#globalLoader')?.classList.add('show');
+sb.auth.getSession().then(boot).catch(err=>{const b=document.querySelector('#globalLoader');b?.classList.remove('show');alert(err?.message||err)});
 </script>
 </body></html>
